@@ -1,3 +1,5 @@
+#if defined(DEVICE_IS_MASTER)
+
 #include "commander.h"
 #include "slave_driver.h" // Potrzebny do wysyłania komend i nowej funkcji
 #include <stdio.h>
@@ -373,3 +375,5 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 //         HAL_UART_Receive_IT(g_huart, &g_uart_rx_char, 1);
 //     }
 // }
+
+#endif

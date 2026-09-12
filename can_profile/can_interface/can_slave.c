@@ -1,68 +1,25 @@
-// can_odrive.c
+// can_slave.c
 
-#include "main.h"
-#include "can_odrive.h"
+#if defined(DEVICE_IS_SLAVE)
+
+// --- Implementacja API dla trybu SLAVE ---
+
+#include "can_interface.h"
 #include "can_wrapper.h"
 #include <string.h>
 #include <stdio.h>
 #include "math.h"
 
-#if defined(DEVICE_IS_SLAVE)
-#include "mc_api.h"
-#include "mc_interface.h"
-#include "mc_configuration_registers.h"
-#endif
+#include "motor_control.h"
 
-// --- Zmienne globalne modułu ---
+// #include "mc_api.h"
+// #include "mc_interface.h"
+// #include "mc_configuration_registers.h"
 
-#if defined(DEVICE_IS_SLAVE)
-extern MCI_Handle_t *pMCI[NBR_OF_MOTORS];
 static uint8_t g_my_axis_id = 0;
 static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data);
 extern volatile uint16_t g_heartbeat_period_ms;
 extern volatile uint16_t g_telemetry_period_ms;
-#endif
-
-#if defined(DEVICE_IS_MASTER)
-static CAN_Master_Rx_Callback_t g_master_rx_callback = NULL;
-#endif
-
-// --- Funkcje wewnętrzne (static) ---
-
-/**
- * @brief Wewnętrzna funkcja do wysyłania ramek CAN za pomocą wrappera.
- */
-static inline void send_can_frame(uint32_t can_id, uint8_t *data, uint8_t len)
-{
-    CAN_Wrapper_TxHeader_t TxHeader;
-    if (len > 8)
-        return;
-
-    TxHeader.Identifier = can_id;
-    TxHeader.DataLength = len;
-
-    if (CAN_Wrapper_Transmit(&TxHeader, data) != HAL_OK)
-    {
-        // Obsluga bledu transmisji
-        // Error_Handler();
-    }
-}
-
-/**
- * @brief Funkcja do załączenia terminatora 120Ohm
- * @param enable, 1 - terminator aktywny, 2 - terminator wyłaczany
- */
-void enableTerminator(bool enable)
-{
-    if (enable)
-    {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET); // Włącz
-    }
-    else
-    {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET); // Wyłącz
-    }
-}
 
 /**
  * @brief Centralny callback dla tego modułu, przekazywany do wrappera.
@@ -70,24 +27,32 @@ void enableTerminator(bool enable)
  */
 static void odrive_rx_callback(const CAN_Wrapper_RxHeader_t *pHeader, const uint8_t *pData)
 {
-#if defined(DEVICE_IS_SLAVE)
     uint32_t axis_id = pHeader->Identifier >> 5;
     if (axis_id == g_my_axis_id)
     {
         uint32_t cmd_id = pHeader->Identifier & 0x1F;
         CAN_Slave_Process_Rx_Message(cmd_id, (uint8_t *)pData);
     }
-#elif defined(DEVICE_IS_MASTER)
-    if (g_master_rx_callback != NULL)
-    {
-        g_master_rx_callback(pHeader, pData);
-    }
-#endif
 }
 
-// --- Implementacja API dla trybu SLAVE ---
+void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id)
+{
+    if (hcan_void == NULL)
+    {
+        Error_Handler();
+    }
 
-#if defined(DEVICE_IS_SLAVE)
+    CAN_Wrapper_Init(hcan_void);
+
+    g_my_axis_id = my_axis_id & 0x3F;
+
+    CAN_Wrapper_RegisterRxCallback(odrive_rx_callback);
+    CAN_Wrapper_ConfigFilter_ODrive(g_my_axis_id);
+    if (CAN_Wrapper_Start() != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
 
 static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
 {
@@ -100,14 +65,13 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
         memcpy(&state, data, sizeof(uint32_t));
         if (state == AXIS_STATE_CLOSED_LOOP_CONTROL)
         {
-            // Przed uruchomieniem, ustaw domyślny cel na 0 RPM.
-            // To również niejawnie ustawi tryb na SPEED_MODE.
-            MC_ProgramSpeedRampMotor1_F(0.0f, 0);
-            MC_StartMotor1();
+            // Domyślnie uruchomienie w trybie prędkości z zerową prędkością w rpm
+            MotorControl_Start();
+            MotorControl_SetSpeed(0.0f);
         }
         else if (state == AXIS_STATE_IDLE)
         {
-            MC_StopMotor1();
+            MotorControl_Stop();
         }
         break;
     }
@@ -115,16 +79,17 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
     {
         float vel_rpm;
         memcpy(&vel_rpm, data, sizeof(float));
-        // Wywołanie tej funkcji automatycznie przełączy bibliotekę na tryb prędkości
-        MC_ProgramSpeedRampMotor1_F(vel_rpm, 0);
+        // Automatyczne przełączenie na tryb regulacji pedkości
+        MotorControl_SetSpeed(vel_rpm);
         break;
     }
     case ODRIVE_SET_INPUT_TORQUE:
     {
         float torque_A;
         memcpy(&torque_A, data, sizeof(float));
-        // Wywołanie tej funkcji automatycznie przełączy bibliotekę na tryb momentu
-        MC_ProgramTorqueRampMotor1_F(torque_A, 0);
+        // Automatyczne przełączenie na tryb regulacji momentu
+        // Domyślnie torque w A - do ustalenia czy w Nm czy w A
+        MotorControl_SetTorque_Iq(torque_A);
         break;
     }
     case ODRIVE_GET_ENCODER_ESTIMATES:
@@ -189,26 +154,6 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
     }
     default:
         break;
-    }
-}
-
-void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id)
-{
-
-    if (hcan_void == NULL)
-    {
-        Error_Handler();
-    }
-
-    CAN_Wrapper_Init(hcan_void);
-
-    g_my_axis_id = my_axis_id & 0x3F;
-
-    CAN_Wrapper_RegisterRxCallback(odrive_rx_callback);
-    CAN_Wrapper_ConfigFilter_ODrive(g_my_axis_id);
-    if (CAN_Wrapper_Start() != HAL_OK)
-    {
-        Error_Handler();
     }
 }
 
@@ -291,93 +236,3 @@ void CAN_Slave_Telemetry(void)
 }
 
 #endif // DEVICE_IS_SLAVE
-
-// --- Implementacja API dla trybu MASTER ---
-
-#if defined(DEVICE_IS_MASTER)
-
-void CAN_Master_Init(void)
-{
-    CAN_Wrapper_RegisterRxCallback(odrive_rx_callback);
-    CAN_Wrapper_ConfigFilter_AcceptAll();
-    if (CAN_Wrapper_Start() != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-void CAN_Master_SetRxCallback(CAN_Master_Rx_Callback_t callback)
-{
-    g_master_rx_callback = callback;
-}
-
-void CAN_Master_Send_State(uint8_t target_node_id, int32_t state)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_AXIS_REQUESTED_STATE);
-    send_can_frame(id, (uint8_t *)&state, sizeof(state));
-}
-
-void CAN_Master_Send_Torque(uint8_t target_node_id, float torque)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_INPUT_TORQUE);
-    send_can_frame(id, (uint8_t *)&torque, sizeof(torque));
-}
-
-void CAN_Master_Send_Velocity(uint8_t target_node_id, float velocity)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_INPUT_VEL);
-    send_can_frame(id, (uint8_t *)&velocity, sizeof(velocity));
-}
-
-void CAN_Master_Send_Modes(uint8_t target_node_id, int32_t control_mode, int32_t input_mode)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_CONTROLLER_MODES);
-    uint8_t data[8];
-    memcpy(data, &control_mode, 4);
-    memcpy(data + 4, &input_mode, 4);
-    send_can_frame(id, data, 8);
-}
-
-void CAN_Master_Send_Reboot(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_REBOOT);
-    send_can_frame(id, NULL, 0);
-}
-
-void CAN_Master_Send_Clear_Errors(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_CLEAR_ERRORS);
-    send_can_frame(id, NULL, 0);
-}
-
-void CAN_Master_Request_Encoder_Estimates(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_GET_ENCODER_ESTIMATES);
-    send_can_frame(id, NULL, 0);
-}
-
-void CAN_Master_Request_IQ(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_GET_IQ);
-    send_can_frame(id, NULL, 0);
-}
-
-void CAN_Master_Send_HeartbeatFreq(uint8_t target_node_id, uint16_t heartbeat_freq, uint16_t telemetry_freq)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_HEARTBEAT_FREQ);
-    uint8_t data[4];
-    memcpy(data, &heartbeat_freq, 2);
-    memcpy(data + 2, &telemetry_freq, 2);
-    send_can_frame(id, data, 4);
-}
-
-void CAN_Master_Send_Limits(uint8_t target_node_id, uint16_t speed_limit, uint16_t torque_limit)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_LIMITS);
-    uint8_t data[4];
-    memcpy(data, &speed_limit, 2);
-    memcpy(data + 2, &torque_limit, 2);
-    send_can_frame(id, data, 4);
-}
-
-#endif // DEVICE_IS_MASTER

@@ -110,6 +110,14 @@ typedef void (*CAN_Master_Rx_Callback_t)(const CAN_Wrapper_RxHeader_t *pHeader, 
  */
 void enableTerminator(bool enable);
 
+/**
+ * @brief Funkcja do wysyłania ramki CAN
+ * @param can_id ID ramki CAN
+ * @param data Wskaźnik do bufora z danymi
+ * @param len Długość danych
+ */
+static inline void send_can_frame(uint32_t can_id, uint8_t *data, uint8_t len);
+
 // --- API dla trybu SLAVE ---
 #if defined(DEVICE_IS_SLAVE)
 

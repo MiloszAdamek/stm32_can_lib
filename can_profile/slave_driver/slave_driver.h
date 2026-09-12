@@ -157,4 +157,4 @@ void SlaveDriver_SetLimits(SlaveRole_t role, uint16_t speed_limit, uint16_t torq
 
 #endif /* INC_SLAVE_DRIVER_H_ */
 
-#if defined(DEVICE_IS_MASTER)
+#endif
