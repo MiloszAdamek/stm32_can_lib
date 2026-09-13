@@ -22,6 +22,11 @@
 // #define DEVICE_IS_SLAVE
 // =================================================================================
 
+typedef struct {
+    float pos_rev;
+    float vel_rpm;
+} CAN_TelemetrySnapshot_t;
+
 /**
  * @brief Makro do tworzenia standardowego 11-bitowego identyfikatora ramki CAN
  *        zgodnie ze schematem ODrive.
