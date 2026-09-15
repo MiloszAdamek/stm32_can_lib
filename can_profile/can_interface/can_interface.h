@@ -121,22 +121,51 @@ void enableTerminator(bool enable);
  * @param data Wskaźnik do bufora z danymi
  * @param len Długość danych
  */
-static inline void send_can_frame(uint32_t can_id, uint8_t *data, uint8_t len);
+void send_can_frame(uint32_t can_id, uint8_t *data, uint8_t len);
 
 // --- API dla trybu SLAVE ---
 #if defined(DEVICE_IS_SLAVE)
+
+
+/// @brief Struktura z callbackami do obsługi zdarzeń CAN w trybie SLAVE związanych ze sterowaniem silnikiem. Umożliwia integrację z własnym kodem sterowania silnikiem.
+typedef struct
+{
+    void (*start)(void);
+    void (*stop)(void);
+
+    void (*set_speed)(float rpm);
+    void (*set_torque)(float iq);
+
+    void (*reboot)(void);
+
+    void (*get_heartbeat)(
+        uint16_t *axis_state,
+        uint16_t *axis_error);
+
+    void (*get_telemetry)(
+        float *position_rev,
+        float *velocity_rpm);
+
+} CAN_Slave_Callbacks_t;
 
 /**
  * @brief (SLAVE) Inicjalizuje peryferium CAN w trybie Slave.
  *        Konfiguruje filtr, aby akceptować tylko ramki zaadresowane do tego węzła.
  * @param hcam_void uchwyt do hfdcan/hcan
  * @param my_axis_id ID tej osi (węzła), wartość od 0 do 63.
+ * @param callbacks Wskaźnik do struktury z callbackami.
  */
-void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id);
+void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id, const CAN_Slave_Callbacks_t *callbacks);
 
 void CAN_Slave_Heartbeat(void);
 
 void CAN_Slave_Telemetry(void);
+
+/**
+ * @brief (SLAVE) Rejestruje callbacki do obsługi zdarzeń CAN związanych ze sterowaniem silnikiem.
+ * @param callbacks Wskaźnik do struktury z callbackami.
+ */
+void CAN_Slave_RegisterCallbacks(const CAN_Slave_Callbacks_t *callbacks);
 
 #endif // DEVICE_IS_SLAVE
 

@@ -4,7 +4,7 @@
 
 #include "slave_driver.h"
 #include "can_wrapper.h"
-#include "can_odrive.h"
+#include "can_interface.h"
 #include "main.h"
 #include <string.h>
 #include <stdbool.h>

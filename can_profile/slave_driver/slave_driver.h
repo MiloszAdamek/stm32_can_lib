@@ -4,7 +4,7 @@
 #ifndef INC_SLAVE_DRIVER_H_
 #define INC_SLAVE_DRIVER_H_
 
-#include "can_odrive.h" // Dla enumów stanów i trybów
+#include "can_interface.h" // Dla enumów stanów i trybów
 #include <stdint.h>
 #include <stdbool.h>
 #include "FreeRTOS.h"

@@ -19,5 +19,4 @@ target_include_directories(stm32_can_lib PUBLIC
 
 target_link_libraries(stm32_can_lib PUBLIC
     stm32cubemx
-    foc_lib
 )
