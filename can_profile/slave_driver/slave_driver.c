@@ -8,13 +8,12 @@
 #include "main.h"
 #include <string.h>
 #include <stdbool.h>
-#include <stdio.h>
 
 // =================================================================================
 // ===           				KONFIGURACJA 								     ===
 // =================================================================================
 const uint8_t SLAVE_NODE_IDS[NUM_SLAVES] = {
-    [FLYWHEEL] = 1, // Koło zamachowe ma CAN ID 1
+    // [FLYWHEEL] = 1, // Koło zamachowe ma CAN ID 1
     // [MOTOR_LEFT]  = 2,
     // [MOTOR_RIGHT] = 3,
     [DRIVE_WHEEL] = 2};

@@ -91,10 +91,7 @@ HAL_StatusTypeDef CAN_Wrapper_Transmit(CAN_Wrapper_TxHeader_t *pHeader, uint8_t 
         TxHeader.IdType = FDCAN_STANDARD_ID;
         TxHeader.TxFrameType = FDCAN_DATA_FRAME;
 
-        // Ensure DataLength matches HAL requirements (DLC)
-        // Note: Make sure pHeader->DataLength is a raw value (e.g. 8),
-        // 8 << 16 = 0x00080000 which is FDCAN_DLC_BYTES_8. Correct.
-        TxHeader.DataLength = pHeader->DataLength << 16;
+        TxHeader.DataLength = pHeader->DataLength;
 
         // Stałe parametry dla trybu Classic CAN
         TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
@@ -131,6 +128,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
                 wrapperHeader.Identifier = RxHeader.Identifier;
                 // HAL_FDCAN_GetRxMessage zwraca już zdekodowaną wartość.
                 wrapperHeader.DataLength = RxHeader.DataLength;
+
                 // Wywołaj callback wyższego poziomu (np. odrive_rx_callback)
                 g_rx_callback(&wrapperHeader, RxData);
             }

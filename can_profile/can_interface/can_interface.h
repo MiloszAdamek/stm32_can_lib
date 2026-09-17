@@ -161,6 +161,8 @@ void CAN_Slave_Heartbeat(void);
 
 void CAN_Slave_Telemetry(void);
 
+void CAN_Slave_PrintLastCommand(void);
+
 /**
  * @brief (SLAVE) Rejestruje callbacki do obsługi zdarzeń CAN związanych ze sterowaniem silnikiem.
  * @param callbacks Wskaźnik do struktury z callbackami.

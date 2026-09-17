@@ -1,8 +1,6 @@
 #ifndef INC_COMMANDER_H_
 #define INC_COMMANDER_H_
 
-#include "main.h" // Potrzebne dla UART_HandleTypeDef
-
 /**
  * @brief Inicjalizuje moduł Commandera.
  * @param huart_void Wskaźnik na uchwyt UART_HandleTypeDef (np. &huart2).

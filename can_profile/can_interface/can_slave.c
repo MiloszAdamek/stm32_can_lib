@@ -15,8 +15,12 @@ static CAN_Slave_Callbacks_t g_callbacks;
 
 static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data);
 
-volatile bool g_can_heartbeat_flag = false;
-volatile bool g_can_telemetry_flag = false;
+volatile bool g_can_heartbeat_flag      = false;
+volatile bool g_can_telemetry_flag      = false;
+volatile bool g_can_cmd_received_flag   = false;
+static uint8_t g_last_cmd_payload[8] = {0};
+
+uint32_t g_last_cmd_id = -1; // Zmienna do debugowania ostatniej komendy CAN
 
 #define ISR_FREQ_HZ 10000U          // 10 kHz
 
@@ -75,7 +79,7 @@ void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id, const CAN_Slave_Callbac
 static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
 {
     switch (cmd_id){
-
+        
         case ODRIVE_SET_AXIS_REQUESTED_STATE:
         {
             uint32_t state;
@@ -108,6 +112,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             // Automatyczne przełączenie na tryb regulacji pedkości
             if (g_callbacks.set_speed)
             {
+                // printf("CAN: Set speed to %.2f RPM\r\n", vel_rpm);
                 g_callbacks.set_speed(vel_rpm);
             }
             break;
@@ -116,6 +121,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
         {
             float torque_A;
             memcpy(&torque_A, data, sizeof(float));
+            // printf("CAN: Set torque to %.2f A\r\n", torque_A);
             // Automatyczne przełączenie na tryb regulacji momentu
             // Domyślnie torque w A - do ustalenia czy w Nm czy w A
             if (g_callbacks.set_torque)
@@ -191,6 +197,58 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
         }
         default:
             break;
+    }
+    g_last_cmd_id = cmd_id; // Zapisz ostatnią komendę do debugowania
+    memcpy(g_last_cmd_payload, data, 8); // Zapisz ostatni payload do debugowania
+    g_can_cmd_received_flag = true; // Ustaw flagę, że otrzymano komendę CAN
+}
+
+// Funkcja do printowania w while(1) ostatniej komendy CAN, przydatne do debugowania
+void CAN_Slave_PrintLastCommand(void)
+{
+    switch (g_last_cmd_id)
+    {
+        case ODRIVE_SET_AXIS_REQUESTED_STATE:
+        {
+            uint32_t state;
+            memcpy(&state, g_last_cmd_payload, sizeof(uint32_t));
+            printf("CAN CMD: SET_AXIS_STATE | State: %lu\r\n", (unsigned long)state);
+            break;
+        }
+        case ODRIVE_SET_INPUT_VEL:
+        {
+            float vel_rpm;
+            memcpy(&vel_rpm, g_last_cmd_payload, sizeof(float));
+            printf("CAN CMD: SET_INPUT_VEL | Vel: %.2f RPM\r\n", vel_rpm);
+            break;
+        }
+        case ODRIVE_SET_INPUT_TORQUE:
+        {
+            float torque_A;
+            memcpy(&torque_A, g_last_cmd_payload, sizeof(float));
+            printf("CAN CMD: SET_INPUT_TORQUE | Torque: %.2f A\r\n", torque_A);
+            break;
+        }
+        case ODRIVE_REBOOT:
+        {
+            printf("CAN CMD: ODRIVE_REBOOT\r\n");
+            break;
+        }
+        case ODRIVE_SET_HEARTBEAT_FREQ:
+        {
+            uint16_t hb_freq, tel_freq;
+            memcpy(&hb_freq, &g_last_cmd_payload[0], sizeof(uint16_t));
+            memcpy(&tel_freq, &g_last_cmd_payload[2], sizeof(uint16_t));
+            printf("CAN CMD: SET_HEARTBEAT_FREQ | Heartbeat: %u Hz, Telemetry: %u Hz\r\n", hb_freq, tel_freq);
+            break;
+        }
+        default:
+        {
+            if (g_last_cmd_id != (uint32_t)-1) {
+                printf("CAN CMD: Unknown (0x%02X)\r\n", (unsigned int)g_last_cmd_id);
+            }
+            break;
+        }
     }
 }
 

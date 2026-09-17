@@ -7,8 +7,6 @@
 #include "can_interface.h"
 #include "can_wrapper.h"
 #include <string.h>
-#include <stdio.h>
-#include "math.h"
 
 // --- Zmienne globalne modułu ---
 static CAN_Master_Rx_Callback_t g_master_rx_callback = NULL;
