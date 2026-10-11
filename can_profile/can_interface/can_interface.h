@@ -146,6 +146,10 @@ typedef struct
         float *position_rev,
         float *velocity_rpm);
 
+    void (*clear_faults)(void);
+
+    uint16_t (*get_faults)(void);
+
 } CAN_Slave_Callbacks_t;
 
 /**

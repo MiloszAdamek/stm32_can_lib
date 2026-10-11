@@ -154,11 +154,14 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
         //     send_can_frame(id, tx_data, 8);
         //     break;
         // }
-        // case ODRIVE_CLEAR_ERRORS:
-        // {
-        //     MC_AcknowledgeFaultMotor1();
-        //     break;
-        // }
+        case ODRIVE_CLEAR_ERRORS:
+        {
+            if (g_callbacks.clear_faults)
+            {
+                g_callbacks.clear_faults();
+            }
+            break;
+        }
         case ODRIVE_REBOOT:
         {
             if (g_callbacks.reboot)
@@ -262,16 +265,17 @@ void CAN_Slave_Heartbeat(void)
     // uint16_t axis_state = (current_state == RUN) ? AXIS_STATE_CLOSED_LOOP_CONTROL : AXIS_STATE_IDLE;
     // uint16_t motor_power_int = (uint16_t)MC_GetAveragePowerMotor1_F();
 
-    uint16_t axis_error = 0;
+    uint16_t axis_faults = 0;
     uint16_t axis_state = 0;
 
     if (g_callbacks.get_heartbeat)
     {
-        g_callbacks.get_heartbeat(&axis_state, &axis_error);
+        g_callbacks.get_heartbeat(&axis_state, &axis_faults);
     }
 
     memcpy(&tx_data[0], &axis_state, sizeof(uint16_t));
-    memcpy(&tx_data[2], &axis_error, sizeof(uint16_t));
+    memcpy(&tx_data[2], &axis_faults, sizeof(uint16_t));
+    
     // memcpy(&tx_data[4], &occurred_faults, sizeof(uint16_t));
     // memcpy(&tx_data[6], &motor_power_int, sizeof(uint16_t));
 
