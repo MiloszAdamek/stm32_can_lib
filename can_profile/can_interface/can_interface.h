@@ -74,6 +74,28 @@ typedef enum
 #define MC_SW_ERROR ((uint16_t)0x0080)   /**< @brief Software Error. */
 #define MC_DP_FAULT ((uint16_t)0x0400)   /**< @brief Error Driver protection fault. */
 
+// Kody błędów naszego sterownika
+
+#define MOTOR_FAULT_NONE                    0U
+
+/* Bit 0–4: power stage */
+#define MOTOR_FAULT_DRIVER                  (1UL << 0)
+#define MOTOR_FAULT_DRIVER_GATE             (1UL << 1)
+#define MOTOR_FAULT_DRIVER_OVERCURRENT      (1UL << 2)
+#define MOTOR_FAULT_DRIVER_OVERTEMP         (1UL << 3)
+#define MOTOR_FAULT_DRIVER_UNDERVOLTAGE     (1UL << 4)
+
+/* Bit 5–12: control loop */
+#define MOTOR_FAULT_OVERCURRENT             (1UL << 5)
+#define MOTOR_FAULT_MOTOR_OVERTEMP          (1UL << 6)
+#define MOTOR_FAULT_MOSFET_OVERTEMP         (1UL << 7)
+#define MOTOR_FAULT_VBUS_OVERVOLTAGE        (1UL << 8)
+#define MOTOR_FAULT_VBUS_UNDERVOLTAGE       (1UL << 9)
+#define MOTOR_FAULT_ENCODER                 (1UL << 10)
+#define MOTOR_FAULT_CONTROL                 (1UL << 11)
+#define MOTOR_FAULT_INVALID_MEASUREMENTS    (1UL << 12)
+
+
 /**
  * @brief Definicje stanów osi ODrive.
  */
@@ -148,7 +170,7 @@ typedef struct
 
     void (*clear_faults)(void);
 
-    uint16_t (*get_faults)(void);
+    void (*get_faults)(uint16_t *faults);
 
 } CAN_Slave_Callbacks_t;
 
