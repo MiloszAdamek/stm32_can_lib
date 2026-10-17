@@ -262,18 +262,6 @@ void CAN_Master_Send_Reboot(uint8_t target_node_id);
 void CAN_Master_Send_Clear_Errors(uint8_t target_node_id);
 
 /**
- * @brief (MASTER) Wysyła żądanie o estymaty z enkodera (pozycja, prędkość).
- * @param target_node_id ID węzła docelowego.
- */
-void CAN_Master_Request_Encoder_Estimates(uint8_t target_node_id);
-
-/**
- * @brief (MASTER) Wysyła żądanie o wartości prądów Iq (zadany i mierzony).
- * @param target_node_id ID węzła docelowego.
- */
-void CAN_Master_Request_IQ(uint8_t target_node_id);
-
-/**
  * @brief (MASTER) Ustawia parametr Slave'a - częstotliwosc wysyłania ramek heartbeat i telemetry
  * @param target_node_id ID węzła docelowego.
  */
