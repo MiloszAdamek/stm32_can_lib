@@ -56,6 +56,12 @@ void CAN_Master_Send_Velocity(uint8_t target_node_id, float velocity)
     send_can_frame(id, (uint8_t *)&velocity, sizeof(velocity));
 }
 
+void CAN_Master_Send_WatchdogTimeout(uint8_t target_node_id, uint16_t timeout_ms)
+{
+    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, DRV_SET_WATCHDOG_TIMEOUT);
+    send_can_frame(id, (uint8_t *)&timeout_ms, sizeof(timeout_ms));
+}
+
 void CAN_Master_Send_Modes(uint8_t target_node_id, int32_t control_mode, int32_t input_mode)
 {
     uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_CONTROLLER_MODES);

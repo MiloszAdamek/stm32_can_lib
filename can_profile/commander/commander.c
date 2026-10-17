@@ -40,6 +40,7 @@ void Commander_Init(void* huart_void) {
     printf(" A <id>                     (Ack Faults - alias for Clear Errors)\r\n");
     printf(" F <id> <hb_hz> <tel_hz>    (Set Heartbeat and Telemetry frequency)\r\n");
     printf(" L <id> <torque>            (Set Torque Limit (A))\r\n");
+    printf(" W <id> <timeout_ms>        (Set Watchdog Timeout in ms, 0 to disable)\r\n");
     printf("> ");
 }
 
@@ -174,6 +175,17 @@ static void process_command(char* cmd) {
             float torque_limit = atof(arg1_str);
             printf("CMD: Set Torque Limit for ID %d -> %.2f A\r\n", slave_id, torque_limit);
             SlaveDriver_SetTorqueLimit(slave_role, torque_limit);
+            break;
+        }
+        case 'W':
+        case 'w': {
+            if (arg1_str == NULL) {
+                printf("Error: Missing watchdog timeout argument. Usage: W <id> <timeout_ms>\r\n");
+                break;
+            }
+            uint16_t timeout_ms = (uint16_t)atoi(arg1_str);
+            printf("CMD: Set Watchdog Timeout for ID %d -> %u ms\r\n", slave_id, timeout_ms);
+            SlaveDriver_SetWatchdogTimeout(slave_role, timeout_ms);
             break;
         }
         default:

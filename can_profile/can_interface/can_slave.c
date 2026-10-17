@@ -32,6 +32,12 @@ uint32_t g_last_cmd_id = -1; // Zmienna do debugowania ostatniej komendy CAN
 volatile uint32_t g_heartbeat_period_ticks = PERIOD_TICKS(HEARTBEAT_FREQ_HZ);
 volatile uint32_t g_telemetry_period_ticks = PERIOD_TICKS(TELEMETRY_FREQ_HZ);
 
+#if defined (WATCHDOG_ENABLED)
+    const uint32_t watchdog_timeout_ms = 200;
+    uint32_t volatile g_comm_timeout_cnt = 0; // Reset licznika po odebraniu ramki
+    volatile bool g_watchdog_enabled = false;
+#endif
+
 /**
  * @brief Callback do odbierania wiadomości od mastera, przekazywany do wrappera CAN.
  */
@@ -77,7 +83,11 @@ void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id, const CAN_Slave_Callbac
 }
 
 static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
-{
+{   
+    #if defined (WATCHDOG_ENABLED)
+        g_comm_timeout_cnt = 0; // Reset licznika po odebraniu ramki
+    #endif
+
     switch (cmd_id){
         
         case ODRIVE_SET_AXIS_REQUESTED_STATE:
@@ -144,6 +154,18 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             {
                 g_callbacks.reboot();
             }
+            break;
+        }
+        case DRV_SET_WATCHDOG_TIMEOUT:
+        {
+            #if defined (WATCHDOG_ENABLED)
+                if (g_callbacks.set_watchdog_timeout)
+                {
+                    uint16_t timeout_ms;
+                    memcpy(&timeout_ms, data, sizeof(uint16_t));
+                    g_callbacks.set_watchdog_timeout(timeout_ms);
+                }
+            #endif
             break;
         }
         case ODRIVE_SET_HEARTBEAT_FREQ:
@@ -235,6 +257,13 @@ void CAN_Slave_PrintLastCommand(void)
             float torque_limit_A;
             memcpy(&torque_limit_A, &g_last_cmd_payload[0], sizeof(float));
             printf("CAN CMD: SET_LIMITS | Torque Limit: %.2f A\r\n", torque_limit_A);
+            break;
+        }
+        case DRV_SET_WATCHDOG_TIMEOUT:
+        {
+            uint16_t timeout_ms;
+            memcpy(&timeout_ms, &g_last_cmd_payload[0], sizeof(uint16_t));
+            printf("CAN CMD: SET_WATCHDOG_TIMEOUT | Timeout: %u ms\r\n", timeout_ms);
             break;
         }
         default:

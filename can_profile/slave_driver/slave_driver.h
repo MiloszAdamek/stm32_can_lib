@@ -162,6 +162,13 @@ void SlaveDriver_SetLimits(SlaveRole_t role, uint16_t speed_limit, uint16_t torq
  */
 void SlaveDriver_SetTorqueLimit(SlaveRole_t role, float torque_limit);
 
+/**
+ * @brief Ustawia czas wyłączenia watchdoga w ms
+ * @param role Rola silnika.
+ * @param timeout_ms czas w ms, 0 wyłącza watchdoga
+ */
+void SlaveDriver_SetWatchdogTimeout(SlaveRole_t role, uint16_t timeout_ms);
+
 #endif /* INC_SLAVE_DRIVER_H_ */
 
 #endif

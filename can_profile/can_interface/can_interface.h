@@ -53,6 +53,7 @@ typedef enum
     ODRIVE_SET_HEARTBEAT_FREQ = 0x0F,
     ODRIVE_GET_IQ = 0x14,
     ODRIVE_REBOOT = 0x16,
+    DRV_SET_WATCHDOG_TIMEOUT = 0x17,
     ODRIVE_CLEAR_ERRORS = 0x18,
 } ODrive_CAN_Commands_t;
 
@@ -177,6 +178,8 @@ typedef struct
     void (*set_torque_limit_A)(float torque_limit_A);
 
     void (*set_torque_limit_Nm)(float torque_limit_Nm);
+
+    void (*set_watchdog_timeout)(uint16_t timeout_ms);
 } CAN_Slave_Callbacks_t;
 
 /**

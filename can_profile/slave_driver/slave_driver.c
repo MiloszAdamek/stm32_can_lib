@@ -177,6 +177,14 @@ void SlaveDriver_SetHeartbeatFreq(SlaveRole_t role, uint16_t heartbeat_freq, uin
     }
 }
 
+void SlaveDriver_SetWatchdogTimeout(SlaveRole_t role, uint16_t timeout_ms)
+{
+    if (role < NUM_SLAVES)
+    {
+        CAN_Master_Send_WatchdogTimeout(SLAVE_NODE_IDS[role], timeout_ms);
+    }
+}
+
 bool SlaveDriver_IsOnline(SlaveRole_t role, uint32_t timeout_ms)
 {
     if (role < NUM_SLAVES)
