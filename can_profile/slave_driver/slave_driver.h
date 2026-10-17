@@ -155,6 +155,13 @@ SlaveRole_t GetSlaveRoleFromId(uint8_t node_id);
  */
 void SlaveDriver_SetLimits(SlaveRole_t role, uint16_t speed_limit, uint16_t torque_limit);
 
+/**
+ * @brief Ustawia limit momentu w amperach
+ * @param role Rola silnika.
+ * @param torque_limit maksymalny moment w A
+ */
+void SlaveDriver_SetTorqueLimit(SlaveRole_t role, float torque_limit);
+
 #endif /* INC_SLAVE_DRIVER_H_ */
 
 #endif

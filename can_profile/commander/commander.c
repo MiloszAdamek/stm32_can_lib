@@ -39,6 +39,7 @@ void Commander_Init(void* huart_void) {
     printf(" R <id>                     (Reboot Slave)\r\n");
     printf(" A <id>                     (Ack Faults - alias for Clear Errors)\r\n");
     printf(" F <id> <hb_hz> <tel_hz>    (Set Heartbeat and Telemetry frequency)\r\n");
+    printf(" L <id> <torque>            (Set Torque Limit (A))\r\n");
     printf("> ");
 }
 
@@ -163,6 +164,17 @@ static void process_command(char* cmd) {
 
            SlaveDriver_SetHeartbeatFreq(slave_role, heartbeat_freq, telemetry_freq);
            break;
+        }
+        case 'L':
+        case 'l': {
+            if (arg1_str == NULL) {
+                printf("Error: Missing torque limit argument. Usage: L <id> <torque>\r\n");
+                break;
+            }
+            float torque_limit = atof(arg1_str);
+            printf("CMD: Set Torque Limit for ID %d -> %.2f A\r\n", slave_id, torque_limit);
+            SlaveDriver_SetTorqueLimit(slave_role, torque_limit);
+            break;
         }
         default:
             printf("Error: Unknown command '%c'\r\n", command_char);

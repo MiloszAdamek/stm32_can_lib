@@ -115,6 +115,14 @@ void SlaveDriver_SetTorque(SlaveRole_t role, float torque)
     }
 }
 
+void SlaveDriver_SetTorqueLimit(SlaveRole_t role, float torque_limit)
+{
+    if (role < NUM_SLAVES)
+    {
+        CAN_Master_Send_TorqueLimit(SLAVE_NODE_IDS[role], torque_limit);
+    }
+}
+
 void SlaveDriver_SetState(SlaveRole_t role, ODrive_Axis_State_t state)
 {
     if (role < NUM_SLAVES)

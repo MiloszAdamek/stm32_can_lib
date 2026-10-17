@@ -77,18 +77,6 @@ void CAN_Master_Send_Clear_Errors(uint8_t target_node_id)
     send_can_frame(id, NULL, 0);
 }
 
-void CAN_Master_Request_Encoder_Estimates(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_GET_ENCODER_ESTIMATES);
-    send_can_frame(id, NULL, 0);
-}
-
-void CAN_Master_Request_IQ(uint8_t target_node_id)
-{
-    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_GET_IQ);
-    send_can_frame(id, NULL, 0);
-}
-
 void CAN_Master_Send_HeartbeatFreq(uint8_t target_node_id, uint16_t heartbeat_freq, uint16_t telemetry_freq)
 {
     uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_HEARTBEAT_FREQ);
@@ -105,6 +93,12 @@ void CAN_Master_Send_Limits(uint8_t target_node_id, uint16_t speed_limit, uint16
     memcpy(data, &speed_limit, 2);
     memcpy(data + 2, &torque_limit, 2);
     send_can_frame(id, data, 4);
+}
+
+void CAN_Master_Send_TorqueLimit(uint8_t target_node_id, float torque_limit)
+{
+    uint32_t id = ODRIVE_MAKE_CAN_ID(target_node_id, ODRIVE_SET_LIMITS);
+    send_can_frame(id, (uint8_t *)&torque_limit, sizeof(torque_limit));
 }
 
 #endif // DEVICE_IS_MASTER

@@ -130,30 +130,6 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        // case ODRIVE_GET_ENCODER_ESTIMATES:
-        // {
-        //     uint8_t tx_data[8];
-        //     float pos_estimate = (float)MC_GetElAngledppMotor1();
-        //     float vel_estimate = MC_GetAverageMecSpeedMotor1_F();
-        //     memcpy(&tx_data[0], &pos_estimate, sizeof(float));
-        //     memcpy(&tx_data[4], &vel_estimate, sizeof(float));
-        //     uint32_t id = ODRIVE_MAKE_CAN_ID(g_my_axis_id, ODRIVE_GET_ENCODER_ESTIMATES);
-        //     send_can_frame(id, tx_data, 8);
-        //     break;
-        // }
-        // case ODRIVE_GET_IQ:
-        // {
-        //     uint8_t tx_data[8];
-        //     qd_t iqd_measured = MC_GetIqdMotor1();
-        //     qd_t iqd_setpoint = MC_GetIqdrefMotor1();
-        //     float iq_setpoint_val = (float)iqd_setpoint.q;
-        //     float iq_measured_val = (float)iqd_measured.q;
-        //     memcpy(&tx_data[0], &iq_setpoint_val, sizeof(float));
-        //     memcpy(&tx_data[4], &iq_measured_val, sizeof(float));
-        //     uint32_t id = ODRIVE_MAKE_CAN_ID(g_my_axis_id, ODRIVE_GET_IQ);
-        //     send_can_frame(id, tx_data, 8);
-        //     break;
-        // }
         case ODRIVE_CLEAR_ERRORS:
         {
             if (g_callbacks.clear_faults)
@@ -198,6 +174,15 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
 
             break;
         }
+
+        case ODRIVE_SET_LIMITS:
+        {   
+            float new_torque_limit_A;
+            memcpy(&new_torque_limit_A, &data[0], sizeof(float));
+            g_callbacks.set_torque_limit_A(new_torque_limit_A);
+            break;
+        }
+
         default:
             break;
     }
@@ -243,6 +228,13 @@ void CAN_Slave_PrintLastCommand(void)
             memcpy(&hb_freq, &g_last_cmd_payload[0], sizeof(uint16_t));
             memcpy(&tel_freq, &g_last_cmd_payload[2], sizeof(uint16_t));
             printf("CAN CMD: SET_HEARTBEAT_FREQ | Heartbeat: %u Hz, Telemetry: %u Hz\r\n", hb_freq, tel_freq);
+            break;
+        }
+        case ODRIVE_SET_LIMITS:
+        {
+            float torque_limit_A;
+            memcpy(&torque_limit_A, &g_last_cmd_payload[0], sizeof(float));
+            printf("CAN CMD: SET_LIMITS | Torque Limit: %.2f A\r\n", torque_limit_A);
             break;
         }
         default:

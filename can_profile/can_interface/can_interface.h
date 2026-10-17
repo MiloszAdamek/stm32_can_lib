@@ -172,6 +172,11 @@ typedef struct
 
     void (*get_faults)(uint16_t *faults);
 
+    void (*set_speed_limit)(float speed_limit_rpm);
+
+    void (*set_torque_limit_A)(float torque_limit_A);
+
+    void (*set_torque_limit_Nm)(float torque_limit_Nm);
 } CAN_Slave_Callbacks_t;
 
 /**
@@ -276,6 +281,13 @@ void CAN_Master_Send_HeartbeatFreq(uint8_t target_node_id, uint16_t heartbeat_fr
  * @param target_node_id ID węzła docelowego.
  */
 void CAN_Master_Send_Limits(uint8_t target_node_id, uint16_t speed_limit, uint16_t torque_limit);
+
+/**
+ * @brief (MASTER) Ustawia parametr Slave'a - limit momentu
+ * @param target_node_id ID węzła docelowego.
+ * @param torque_limit Limit momentu w [A].
+ */
+void CAN_Master_Send_TorqueLimit(uint8_t target_node_id, float torque_limit);
 
 #endif // DEVICE_IS_MASTER
 
