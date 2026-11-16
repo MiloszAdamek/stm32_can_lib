@@ -1,10 +1,10 @@
-// can_odrive.h
-
-#ifndef INC_CAN_ODRIVE_H_
-#define INC_CAN_ODRIVE_H_
+#ifndef STM32_CAN_INTERFACE_H
+#define STM32_CAN_INTERFACE_H
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include "can_foc_state.h"
 #include "can_wrapper.h"
 
 // =================================================================================
@@ -16,7 +16,7 @@
 //
 // Przykład w main.c:
 // #define DEVICE_IS_MASTER
-// #include "can_odrive.h"
+// #include "can_interface.h"
 //
 // #define DEVICE_IS_MASTER
 // #define DEVICE_IS_SLAVE
@@ -27,35 +27,35 @@ typedef struct {
     float vel_rpm;
 } CAN_TelemetrySnapshot_t;
 
-/**
- * @brief Makro do tworzenia standardowego 11-bitowego identyfikatora ramki CAN
- *        zgodnie ze schematem ODrive.
- * @param node_id ID osi/węzła (6 bitów, 0-63).
- * @param cmd_id ID komendy (5 bitów, 0-31).
- */
-#define ODRIVE_MAKE_CAN_ID(node_id, cmd_id) (((uint32_t)(node_id) << 5) | (uint32_t)(cmd_id))
+typedef struct {
+    uint16_t state;
+    uint16_t faults;
+} CAN_Heartbeat_t;
 
-/**
- * @brief Definicje identyfikatorów komend protokołu ODrive CAN.
- */
+/* Call with the payload of the corresponding Classic CAN frame. */
+CAN_Heartbeat_t CAN_DecodeHeartbeat(const uint8_t *data);
+CAN_TelemetrySnapshot_t CAN_DecodeEncoderFeedback(const uint8_t *data);
+
+/* Standard 11-bit identifier with a 6-bit node and a 5-bit command. */
+#define CAN_NODE_ID_MAX 0x3fu
+#define CAN_COMMAND_BITS 5u
+#define CAN_MAKE_ID(node, command) (((uint32_t)(node) << CAN_COMMAND_BITS) | (uint32_t)(command))
+#define CAN_ID_NODE(id) ((uint32_t)(id) >> CAN_COMMAND_BITS)
+#define CAN_ID_COMMAND(id) ((uint32_t)(id) & ((1u << CAN_COMMAND_BITS) - 1u))
+
 typedef enum
 {
-    ODRIVE_HEARTBEAT_MESSAGE = 0x01,
-    ODRIVE_GET_MOTOR_ERROR = 0x03,
-    ODRIVE_GET_ENCODER_ERROR = 0x04,
-    ODRIVE_SET_AXIS_REQUESTED_STATE = 0x07,
-    ODRIVE_SET_LIMITS = 0x08,
-    ODRIVE_GET_ENCODER_ESTIMATES = 0x09,
-    ODRIVE_SET_CONTROLLER_MODES = 0x0B,
-    ODRIVE_SET_INPUT_POS = 0x0C,
-    ODRIVE_SET_INPUT_VEL = 0x0D,
-    ODRIVE_SET_INPUT_TORQUE = 0x0E,
-    ODRIVE_SET_HEARTBEAT_FREQ = 0x0F,
-    ODRIVE_GET_IQ = 0x14,
-    ODRIVE_REBOOT = 0x16,
-    DRV_SET_WATCHDOG_TIMEOUT = 0x17,
-    ODRIVE_CLEAR_ERRORS = 0x18,
-} ODrive_CAN_Commands_t;
+    CAN_CMD_HEARTBEAT = 0x01,
+    CAN_CMD_REQUEST_STATE = 0x07,
+    CAN_CMD_SET_CURRENT_LIMIT = 0x08,
+    CAN_CMD_ENCODER_FEEDBACK = 0x09,
+    CAN_CMD_SET_VELOCITY = 0x0D,
+    CAN_CMD_SET_TORQUE = 0x0E,
+    CAN_CMD_SET_FEEDBACK_RATES = 0x0F,
+    CAN_CMD_REBOOT = 0x16,
+    CAN_CMD_SET_WATCHDOG_TIMEOUT = 0x17,
+    CAN_CMD_CLEAR_FAULTS = 0x18,
+} CAN_Command_t;
 
 /**
  * @anchor fault_codes
@@ -97,31 +97,12 @@ typedef enum
 #define MOTOR_FAULT_INVALID_MEASUREMENTS    (1UL << 12)
 
 
-/**
- * @brief Definicje stanów osi ODrive.
- */
+/* State request payload values. Heartbeats carry CAN_FOC_State_t. */
 typedef enum
 {
-    AXIS_STATE_UNDEFINED = 0,
-    AXIS_STATE_IDLE = 1,
-    AXIS_STATE_STARTUP_SEQUENCE = 2,
-    AXIS_STATE_FULL_CALIBRATION_SEQUENCE = 3,
-    AXIS_STATE_MOTOR_CALIBRATION = 4,
-    AXIS_STATE_ENCODER_INDEX_SEARCH = 6,
-    AXIS_STATE_ENCODER_OFFSET_CALIBRATION = 7,
-    AXIS_STATE_CLOSED_LOOP_CONTROL = 8,
-} ODrive_Axis_State_t;
-
-/**
- * @brief Definicje trybów sterowania ODrive.
- */
-typedef enum
-{
-    CONTROL_MODE_VOLTAGE_CONTROL = 0,
-    CONTROL_MODE_TORQUE_CONTROL = 1,
-    CONTROL_MODE_VELOCITY_CONTROL = 2,
-    CONTROL_MODE_POSITION_CONTROL = 3,
-} ODrive_Control_Mode_t;
+    CAN_REQUEST_STOP = 1,
+    CAN_REQUEST_START = 8,
+} CAN_StateRequest_t;
 
 /**
  * @brief Definicja wskaźnika na funkcję zwrotną (callback) dla trybu MASTER.
@@ -144,7 +125,7 @@ void enableTerminator(bool enable);
  * @param data Wskaźnik do bufora z danymi
  * @param len Długość danych
  */
-void send_can_frame(uint32_t can_id, uint8_t *data, uint8_t len);
+HAL_StatusTypeDef send_can_frame(uint32_t can_id, const void *data, uint8_t len);
 
 // --- API dla trybu SLAVE ---
 #if defined(DEVICE_IS_SLAVE)
@@ -208,6 +189,28 @@ void CAN_Slave_RegisterCallbacks(const CAN_Slave_Callbacks_t *callbacks);
 // --- API dla trybu MASTER ---
 #if defined(DEVICE_IS_MASTER)
 
+typedef struct {
+    CAN_TelemetrySnapshot_t encoder;
+    uint32_t heartbeat_ms, encoder_ms;
+    uint16_t state, faults; /* Raw heartbeat fields. See CAN_FOC_State_t. */
+    bool heartbeat_seen, encoder_valid;
+} CAN_Master_Feedback_t;
+
+typedef struct {
+    uint32_t node_id;
+    /* The library manages feedback. */
+    CAN_Master_Feedback_t feedback;
+} CAN_Master_Node_t;
+
+/* Configure the bus timing and message RAM before opening. Keep nodes alive
+ * until CAN stops and exclude the receive ISR when calling from task context.
+ * One bus is supported. */
+HAL_StatusTypeDef CAN_Master_Open(FDCAN_HandleTypeDef *bus, CAN_Master_Node_t *nodes, size_t count);
+/* Access the caller-owned node record while excluding the receive ISR. */
+CAN_Master_Node_t *CAN_Master_FindNode(uint32_t node_id);
+bool CAN_Master_GetFeedback(uint32_t node_id, CAN_Master_Feedback_t *out, uint32_t max_encoder_age_ms);
+const char *CAN_Master_FaultName(unsigned bit);
+
 /**
  * @brief (MASTER) Inicjalizuje peryferium CAN w trybie Master.
  *        Konfiguruje filtr tak, aby akceptował wszystkie przychodzące ramki.
@@ -223,63 +226,50 @@ void CAN_Master_SetRxCallback(CAN_Master_Rx_Callback_t callback);
 /**
  * @brief (MASTER) Ustawia stan docelowej osi.
  * @param target_node_id ID węzła docelowego.
- * @param state Wartość stanu z enum ODrive_Axis_State_t.
+ * @param state Wartość stanu z enum CAN_StateRequest_t.
  */
-void CAN_Master_Send_State(uint8_t target_node_id, int32_t state);
+HAL_StatusTypeDef CAN_Master_Send_State(uint8_t target_node_id, int32_t state);
 
 /**
  * @brief (MASTER) Ustawia docelowy moment obrotowy.
  * @param target_node_id ID węzła docelowego.
- * @param torque Moment obrotowy w [A].
+ * @param torque Surowa wartość zadana w jednostkach używanych przez dany ESC.
  */
-void CAN_Master_Send_Torque(uint8_t target_node_id, float torque);
+HAL_StatusTypeDef CAN_Master_Send_Torque(uint8_t target_node_id, float torque);
 
 /**
  * @brief (MASTER) Ustawia docelową prędkość.
  * @param target_node_id ID węzła docelowego.
  * @param velocity Prędkość w [RPM].
  */
-void CAN_Master_Send_Velocity(uint8_t target_node_id, float velocity);
-
-/**
- * @brief (MASTER) Ustawia tryby sterowania.
- * @param target_node_id ID węzła docelowego.
- * @param control_mode Tryb sterowania (z enum ODrive_Control_Mode_t).
- * @param input_mode Tryb wejścia (zazwyczaj 1 - INPUT_MODE_PASSTHROUGH).
- */
-void CAN_Master_Send_Modes(uint8_t target_node_id, int32_t control_mode, int32_t input_mode);
+HAL_StatusTypeDef CAN_Master_Send_Velocity(uint8_t target_node_id, float velocity);
 
 /**
  * @brief (MASTER) Wysyła komendę restartu do węzła.
  * @param target_node_id ID węzła docelowego.
  */
-void CAN_Master_Send_Reboot(uint8_t target_node_id);
+HAL_StatusTypeDef CAN_Master_Send_Reboot(uint8_t target_node_id);
+HAL_StatusTypeDef CAN_Master_Send_WatchdogTimeout(uint8_t target_node_id, uint16_t timeout_ms);
 
 /**
  * @brief (MASTER) Wysyła komendę kasowania błędów do węzła.
  * @param target_node_id ID węzła docelowego.
  */
-void CAN_Master_Send_Clear_Errors(uint8_t target_node_id);
+HAL_StatusTypeDef CAN_Master_Send_Clear_Errors(uint8_t target_node_id);
 
 /**
  * @brief (MASTER) Ustawia parametr Slave'a - częstotliwosc wysyłania ramek heartbeat i telemetry
  * @param target_node_id ID węzła docelowego.
  */
-void CAN_Master_Send_HeartbeatFreq(uint8_t target_node_id, uint16_t heartbeat_freq, uint16_t telemetry_freq);
+HAL_StatusTypeDef CAN_Master_Send_FeedbackRates(uint8_t target_node_id, uint16_t heartbeat_hz, uint16_t encoder_hz);
 
 /**
- * @brief (MASTER) Ustawia parametr Slave'a - limit predkosci i momentu
+ * @brief (MASTER) Ustawia limit prądu w amperach.
  * @param target_node_id ID węzła docelowego.
+ * @param current_limit_A Limit prądu w [A].
  */
-void CAN_Master_Send_Limits(uint8_t target_node_id, uint16_t speed_limit, uint16_t torque_limit);
-
-/**
- * @brief (MASTER) Ustawia parametr Slave'a - limit momentu
- * @param target_node_id ID węzła docelowego.
- * @param torque_limit Limit momentu w [A].
- */
-void CAN_Master_Send_TorqueLimit(uint8_t target_node_id, float torque_limit);
+HAL_StatusTypeDef CAN_Master_Send_CurrentLimit(uint8_t target_node_id, float current_limit_A);
 
 #endif // DEVICE_IS_MASTER
 
-#endif /* INC_CAN_ODRIVE_H_ */
+#endif /* STM32_CAN_INTERFACE_H */

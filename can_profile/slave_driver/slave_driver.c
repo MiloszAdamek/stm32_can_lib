@@ -27,52 +27,36 @@ extern TaskHandle_t task_slave_monitor_handle;
 // Callback do odbioru ramek od Slave'ów
 static void internal_rx_callback(const CAN_Wrapper_RxHeader_t *pHeader, const uint8_t *pData)
 {
-    uint32_t node_id = pHeader->Identifier >> 5;
-    uint32_t cmd_id = pHeader->Identifier & 0x1F;
+    SlaveRole_t role = GetSlaveRoleFromId(CAN_ID_NODE(pHeader->Identifier));
+    if (role == NUM_SLAVES) return;
 
-    for (int role = 0; role < NUM_SLAVES; role++)
+    volatile SlaveState_t *state = &g_slave_states[role];
+    switch (CAN_ID_COMMAND(pHeader->Identifier))
     {
-        if (SLAVE_NODE_IDS[role] == node_id)
+    case CAN_CMD_HEARTBEAT:
+    {
+        CAN_Heartbeat_t heartbeat = CAN_DecodeHeartbeat(pData);
+        state->axis_state = heartbeat.state;
+        state->axis_error = heartbeat.faults;
+        memcpy((void *)&state->occurred_faults, pData + 4, sizeof(state->occurred_faults));
+        memcpy((void *)&state->motor_power_watt, pData + 6, sizeof(state->motor_power_watt));
+        state->last_heartbeat_tick = HAL_GetTick();
+
+        if (task_slave_monitor_handle != NULL)
         {
-            switch (cmd_id)
-            {
-            case ODRIVE_HEARTBEAT_MESSAGE:
-                memcpy((void *)&g_slave_states[role].axis_state, &pData[0], sizeof(uint16_t));
-                memcpy((void *)&g_slave_states[role].axis_error, &pData[2], sizeof(uint16_t));
-                memcpy((void *)&g_slave_states[role].occurred_faults, &pData[4], sizeof(uint16_t));
-                memcpy((void *)&g_slave_states[role].motor_power_watt, &pData[6], sizeof(uint16_t));
-                g_slave_states[role].last_heartbeat_tick = HAL_GetTick();
-
-                // printf("CAN RX, Node ID: %d Heartbeat - State: %u, Error: 0x%X, Occurred fault: 0x%X, Motor Power: %u W\r\n",
-                //     (int)node_id,
-                //     g_slave_states[role].axis_state,
-                //     g_slave_states[role].axis_error,
-                //     g_slave_states[role].occurred_faults,
-                //     g_slave_states[role].motor_power_watt);
-
-                // Powiadom zadanie, że otrzymano nowy heartbeat do sprawdzenia
-                if (task_slave_monitor_handle != NULL)
-                {
-                    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                    vTaskNotifyGiveFromISR(task_slave_monitor_handle, &xHigherPriorityTaskWoken);
-                    portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // Jeśli zadanie monitorujące ma wyższy priorytet, przełącz kontekst
-                }
-
-                break;
-            case ODRIVE_GET_ENCODER_ESTIMATES:
-                memcpy((void *)&g_slave_states[role].pos_estimate, &pData[0], sizeof(float)); // Odczyt pozycji w Rev
-                memcpy((void *)&g_slave_states[role].vel_estimate, &pData[4], sizeof(float)); // Odczyt prędkości w Rev/s
-
-                float vel_rpm = g_slave_states[role].vel_estimate;
-                float pos_deg = g_slave_states[role].pos_estimate;
-
-                // printf("CAN RX, Node ID: %d Velocity -> %.2f RPM\r\n", (int)node_id, vel_rpm);
-                // printf("CAN RX, Node ID: %d Position -> %.2f Rev\r\n", (int)node_id, pos_deg);
-
-                break;
-            }
-            return;
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            vTaskNotifyGiveFromISR(task_slave_monitor_handle, &xHigherPriorityTaskWoken);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
+        break;
+    }
+    case CAN_CMD_ENCODER_FEEDBACK:
+    {
+        CAN_TelemetrySnapshot_t encoder = CAN_DecodeEncoderFeedback(pData);
+        state->pos_estimate = encoder.pos_rev;
+        state->vel_estimate = encoder.vel_rpm;
+        break;
+    }
     }
 }
 
@@ -115,15 +99,15 @@ void SlaveDriver_SetTorque(SlaveRole_t role, float torque)
     }
 }
 
-void SlaveDriver_SetTorqueLimit(SlaveRole_t role, float torque_limit)
+void SlaveDriver_SetCurrentLimit(SlaveRole_t role, float current_limit_A)
 {
     if (role < NUM_SLAVES)
     {
-        CAN_Master_Send_TorqueLimit(SLAVE_NODE_IDS[role], torque_limit);
+        CAN_Master_Send_CurrentLimit(SLAVE_NODE_IDS[role], current_limit_A);
     }
 }
 
-void SlaveDriver_SetState(SlaveRole_t role, ODrive_Axis_State_t state)
+void SlaveDriver_SetState(SlaveRole_t role, CAN_StateRequest_t state)
 {
     if (role < NUM_SLAVES)
     {
@@ -139,29 +123,6 @@ void SlaveDriver_ClearErrors(SlaveRole_t role)
     }
 }
 
-// float SlaveDriver_GetVelocity(SlaveRole_t role) {
-//     if (role < NUM_SLAVES) {
-//         CAN_Master_Request_Encoder_Estimates(SLAVE_NODE_IDS[role]);
-//         return g_slave_states[role].vel_estimate;
-//     }
-//     return 0.0f;
-// }
-
-// float SlaveDriver_GetPosition(SlaveRole_t role) {
-//     if (role < NUM_SLAVES) {
-//         CAN_Master_Request_Encoder_Estimates(SLAVE_NODE_IDS[role]);
-//         return g_slave_states[role].pos_estimate;
-//     }
-//     return 0.0f;
-// }
-
-// uint32_t SlaveDriver_GetState(SlaveRole_t role) {
-//     if (role < NUM_SLAVES) {
-//         return g_slave_states[role].axis_state;
-//     }
-//     return AXIS_STATE_UNDEFINED;
-// }
-
 // uint32_t SlaveDriver_GetError(SlaveRole_t role) {
 //     if (role < NUM_SLAVES) {
 //         return g_slave_states[role].axis_error;
@@ -173,7 +134,7 @@ void SlaveDriver_SetHeartbeatFreq(SlaveRole_t role, uint16_t heartbeat_freq, uin
 {
     if (role < NUM_SLAVES)
     {
-        CAN_Master_Send_HeartbeatFreq(SLAVE_NODE_IDS[role], heartbeat_freq, telemetry_freq);
+        CAN_Master_Send_FeedbackRates(SLAVE_NODE_IDS[role], heartbeat_freq, telemetry_freq);
     }
 }
 
@@ -214,8 +175,7 @@ void SlaveDriver_InitESCs(void)
     {
         SlaveDriver_ClearErrors(role);
         SlaveDriver_SetHeartbeatFreq(role, 50, 50); // Ustawienie częstotliwości wysyłania ramek heartbeat i telemetry
-        // SlaveDriver_SetLimits(role, 3000, 100);
-        SlaveDriver_SetState(role, AXIS_STATE_IDLE);
+        SlaveDriver_SetState(role, CAN_REQUEST_STOP);
     }
 }
 
@@ -223,7 +183,7 @@ void SlaveDriver_StopAll(void)
 {
     for (int role = 0; role < NUM_SLAVES; role++)
     {
-        SlaveDriver_SetState(role, AXIS_STATE_IDLE);
+        SlaveDriver_SetState(role, CAN_REQUEST_STOP);
     }
 }
 
@@ -240,14 +200,6 @@ SlaveRole_t GetSlaveRoleFromId(uint8_t node_id)
         }
     }
     return NUM_SLAVES; // Zwraca wartość oznaczającą błąd (nie znaleziono ID)
-}
-
-void SlaveDriver_SetLimits(SlaveRole_t role, uint16_t speed_limit, uint16_t torque_limit)
-{
-    if (role < NUM_SLAVES)
-    {
-        CAN_Master_Send_Limits(SLAVE_NODE_IDS[role], speed_limit, torque_limit);
-    }
 }
 
 #endif // DEVICE_IS_MASTER

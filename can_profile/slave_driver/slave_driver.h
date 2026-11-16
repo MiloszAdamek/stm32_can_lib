@@ -67,9 +67,9 @@ void SlaveDriver_SetTorque(SlaveRole_t role, float torque);
 /**
  * @brief Zmienia stan osi dla wybranego silnika.
  * @param role Rola silnika.
- * @param state Docelowy stan (np. AXIS_STATE_CLOSED_LOOP_CONTROL).
+ * @param state Docelowy stan (np. CAN_REQUEST_START).
  */
-void SlaveDriver_SetState(SlaveRole_t role, ODrive_Axis_State_t state);
+void SlaveDriver_SetState(SlaveRole_t role, CAN_StateRequest_t state);
 
 /**
  * @brief Wysyła komendę kasowania błędów do wybranego silnika.
@@ -78,27 +78,6 @@ void SlaveDriver_SetState(SlaveRole_t role, ODrive_Axis_State_t state);
 void SlaveDriver_ClearErrors(SlaveRole_t role);
 
 // --- FUNKCJE DO ODCZYTYWANIA STANU (ZAPYTANIA) ---
-
-// /**
-//  * @brief Zwraca ostatnią znaną prędkość silnika.
-//  * @param role Rola silnika.
-//  * @return Prędkość w [RPM].
-//  */
-// float SlaveDriver_GetVelocity(SlaveRole_t role);
-
-// /**
-//  * @brief Zwraca ostatnią znaną pozycję enkodera.
-//  * @param role Rola silnika.
-//  * @return Pozycja (w obrotach).
-//  */
-// float SlaveDriver_GetPosition(SlaveRole_t role);
-
-// /**
-//  * @brief Zwraca ostatni znany stan osi.
-//  * @param role Rola silnika.
-//  * @return Stan z enum ODrive_Axis_State_t.
-//  */
-// uint32_t SlaveDriver_GetState(SlaveRole_t role);
 
 // /**
 //  * @brief Zwraca ostatni znany kod błędu osi.
@@ -148,19 +127,11 @@ void SlaveDriver_StopAll(void);
 SlaveRole_t GetSlaveRoleFromId(uint8_t node_id);
 
 /**
- * @brief Ustawia limity prędkości i momentu
+ * @brief Ustawia limit prądu w amperach.
  * @param role Rola silnika.
- * @param speed_limit maksymalna prędkość w rpm
- * @param torque_limit maksymalny moment w Nm
+ * @param current_limit_A Limit prądu w A.
  */
-void SlaveDriver_SetLimits(SlaveRole_t role, uint16_t speed_limit, uint16_t torque_limit);
-
-/**
- * @brief Ustawia limit momentu w amperach
- * @param role Rola silnika.
- * @param torque_limit maksymalny moment w A
- */
-void SlaveDriver_SetTorqueLimit(SlaveRole_t role, float torque_limit);
+void SlaveDriver_SetCurrentLimit(SlaveRole_t role, float current_limit_A);
 
 /**
  * @brief Ustawia czas wyłączenia watchdoga w ms
