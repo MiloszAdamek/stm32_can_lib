@@ -4,6 +4,7 @@
 #define INC_CAN_WRAPPER_H_
 
 #include "main.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef struct {
@@ -24,6 +25,8 @@ typedef void (*CAN_RxCallback_t)(const CAN_Wrapper_RxHeader_t* pHeader, const ui
  * @param hcan_void Wskaźnik na uchwyt FDCAN_HandleTypeDef.
  */
 void CAN_Wrapper_Init(void* hcan_void);
+void CAN_Wrapper_SetBusOffRecovery(bool enabled);
+HAL_StatusTypeDef CAN_Wrapper_ConfigFilter(uint32_t id, uint32_t mask);
 
 /**
  * @brief Rejestruje funkcję zwrotną, która będzie wywoływana po otrzymaniu nowej wiadomości.
@@ -31,10 +34,10 @@ void CAN_Wrapper_Init(void* hcan_void);
 void CAN_Wrapper_RegisterRxCallback(CAN_RxCallback_t callback);
 
 /**
- * @brief Konfiguruje filtr CAN. Dla ODrive potrzebujemy filtrowania po Node ID.
+ * @brief Konfiguruje filtr CAN dla danego węzła.
  * @param node_id ID węzła (0-63), dla którego ramki mają być akceptowane.
  */
-void CAN_Wrapper_ConfigFilter_ODrive(uint32_t node_id);
+void CAN_Wrapper_ConfigNodeFilter(uint32_t node_id);
 
 /**
  * @brief Konfiguruje filtr CAN tak, aby akceptował wszystkie ramki.

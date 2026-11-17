@@ -13,7 +13,7 @@ static uint8_t g_my_axis_id = 0;
 
 static CAN_Slave_Callbacks_t g_callbacks;
 
-static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data);
+static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, const uint8_t *data);
 
 volatile bool g_can_heartbeat_flag      = false;
 volatile bool g_can_telemetry_flag      = false;
@@ -41,13 +41,11 @@ volatile uint32_t g_telemetry_period_ticks = PERIOD_TICKS(TELEMETRY_FREQ_HZ);
 /**
  * @brief Callback do odbierania wiadomości od mastera, przekazywany do wrappera CAN.
  */
-static void odrive_rx_callback(const CAN_Wrapper_RxHeader_t *pHeader, const uint8_t *pData)
+static void slave_receive(const CAN_Wrapper_RxHeader_t *pHeader, const uint8_t *pData)
 {
-    uint32_t axis_id = pHeader->Identifier >> 5;
-    if (axis_id == g_my_axis_id)
+    if (CAN_ID_NODE(pHeader->Identifier) == g_my_axis_id)
     {
-        uint32_t cmd_id = pHeader->Identifier & 0x1F;
-        CAN_Slave_Process_Rx_Message(cmd_id, (uint8_t *)pData);
+        CAN_Slave_Process_Rx_Message(CAN_ID_COMMAND(pHeader->Identifier), pData);
     }
 }
 
@@ -70,19 +68,19 @@ void CAN_Slave_Init(void *hcan_void, uint8_t my_axis_id, const CAN_Slave_Callbac
 
     CAN_Wrapper_Init(hcan_void);
 
-    g_my_axis_id = my_axis_id & 0x3F;
+    g_my_axis_id = my_axis_id & CAN_NODE_ID_MAX;
 
     CAN_Slave_RegisterCallbacks(callbacks);
 
-    CAN_Wrapper_RegisterRxCallback(odrive_rx_callback);
-    CAN_Wrapper_ConfigFilter_ODrive(g_my_axis_id);
+    CAN_Wrapper_RegisterRxCallback(slave_receive);
+    CAN_Wrapper_ConfigNodeFilter(g_my_axis_id);
     if (CAN_Wrapper_Start() != HAL_OK)
     {
         Error_Handler();
     }
 }
 
-static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
+static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, const uint8_t *data)
 {   
     #if defined (WATCHDOG_ENABLED)
         g_comm_timeout_cnt = 0; // Reset licznika po odebraniu ramki
@@ -90,11 +88,11 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
 
     switch (cmd_id){
         
-        case ODRIVE_SET_AXIS_REQUESTED_STATE:
+        case CAN_CMD_REQUEST_STATE:
         {
             uint32_t state;
             memcpy(&state, data, sizeof(uint32_t));
-            if (state == AXIS_STATE_CLOSED_LOOP_CONTROL)
+            if (state == CAN_REQUEST_START)
             {
                 // Domyślnie uruchomienie w trybie prędkości z zerową prędkością w rpm
                 if (g_callbacks.start)
@@ -106,7 +104,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
                     g_callbacks.set_speed(0.0f);
                 }
             }
-            else if (state == AXIS_STATE_IDLE)
+            else if (state == CAN_REQUEST_STOP)
             {
                 if (g_callbacks.stop)
                 {
@@ -115,7 +113,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        case ODRIVE_SET_INPUT_VEL:
+        case CAN_CMD_SET_VELOCITY:
         {
             float vel_rpm;
             memcpy(&vel_rpm, data, sizeof(float));
@@ -127,7 +125,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        case ODRIVE_SET_INPUT_TORQUE:
+        case CAN_CMD_SET_TORQUE:
         {
             float torque_A;
             memcpy(&torque_A, data, sizeof(float));
@@ -140,7 +138,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        case ODRIVE_CLEAR_ERRORS:
+        case CAN_CMD_CLEAR_FAULTS:
         {
             if (g_callbacks.clear_faults)
             {
@@ -148,7 +146,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        case ODRIVE_REBOOT:
+        case CAN_CMD_REBOOT:
         {
             if (g_callbacks.reboot)
             {
@@ -156,7 +154,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             }
             break;
         }
-        case DRV_SET_WATCHDOG_TIMEOUT:
+        case CAN_CMD_SET_WATCHDOG_TIMEOUT:
         {
             #if defined (WATCHDOG_ENABLED)
                 if (g_callbacks.set_watchdog_timeout)
@@ -168,7 +166,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             #endif
             break;
         }
-        case ODRIVE_SET_HEARTBEAT_FREQ:
+        case CAN_CMD_SET_FEEDBACK_RATES:
         {
             uint16_t new_heartbeat_freq_hz;
             uint16_t new_telemetry_freq_hz;
@@ -197,7 +195,7 @@ static void CAN_Slave_Process_Rx_Message(uint32_t cmd_id, uint8_t *data)
             break;
         }
 
-        case ODRIVE_SET_LIMITS:
+        case CAN_CMD_SET_CURRENT_LIMIT:
         {   
             float new_torque_limit_A;
             memcpy(&new_torque_limit_A, &data[0], sizeof(float));
@@ -218,48 +216,48 @@ void CAN_Slave_PrintLastCommand(void)
 {
     switch (g_last_cmd_id)
     {
-        case ODRIVE_SET_AXIS_REQUESTED_STATE:
+        case CAN_CMD_REQUEST_STATE:
         {
             uint32_t state;
             memcpy(&state, g_last_cmd_payload, sizeof(uint32_t));
-            printf("CAN CMD: SET_AXIS_STATE | State: %lu\r\n", (unsigned long)state);
+            printf("CAN CMD: REQUEST_STATE | State: %lu\r\n", (unsigned long)state);
             break;
         }
-        case ODRIVE_SET_INPUT_VEL:
+        case CAN_CMD_SET_VELOCITY:
         {
             float vel_rpm;
             memcpy(&vel_rpm, g_last_cmd_payload, sizeof(float));
-            printf("CAN CMD: SET_INPUT_VEL | Vel: %.2f RPM\r\n", vel_rpm);
+            printf("CAN CMD: SET_VELOCITY | Vel: %.2f RPM\r\n", vel_rpm);
             break;
         }
-        case ODRIVE_SET_INPUT_TORQUE:
+        case CAN_CMD_SET_TORQUE:
         {
             float torque_A;
             memcpy(&torque_A, g_last_cmd_payload, sizeof(float));
-            printf("CAN CMD: SET_INPUT_TORQUE | Torque: %.2f A\r\n", torque_A);
+            printf("CAN CMD: SET_TORQUE | Torque: %.2f A\r\n", torque_A);
             break;
         }
-        case ODRIVE_REBOOT:
+        case CAN_CMD_REBOOT:
         {
-            printf("CAN CMD: ODRIVE_REBOOT\r\n");
+            printf("CAN CMD: REBOOT\r\n");
             break;
         }
-        case ODRIVE_SET_HEARTBEAT_FREQ:
+        case CAN_CMD_SET_FEEDBACK_RATES:
         {
             uint16_t hb_freq, tel_freq;
             memcpy(&hb_freq, &g_last_cmd_payload[0], sizeof(uint16_t));
             memcpy(&tel_freq, &g_last_cmd_payload[2], sizeof(uint16_t));
-            printf("CAN CMD: SET_HEARTBEAT_FREQ | Heartbeat: %u Hz, Telemetry: %u Hz\r\n", hb_freq, tel_freq);
+            printf("CAN CMD: SET_FEEDBACK_RATES | Heartbeat: %u Hz, Telemetry: %u Hz\r\n", hb_freq, tel_freq);
             break;
         }
-        case ODRIVE_SET_LIMITS:
+        case CAN_CMD_SET_CURRENT_LIMIT:
         {
             float torque_limit_A;
             memcpy(&torque_limit_A, &g_last_cmd_payload[0], sizeof(float));
-            printf("CAN CMD: SET_LIMITS | Torque Limit: %.2f A\r\n", torque_limit_A);
+            printf("CAN CMD: SET_CURRENT_LIMIT | Current limit: %.2f A\r\n", torque_limit_A);
             break;
         }
-        case DRV_SET_WATCHDOG_TIMEOUT:
+        case CAN_CMD_SET_WATCHDOG_TIMEOUT:
         {
             uint16_t timeout_ms;
             memcpy(&timeout_ms, &g_last_cmd_payload[0], sizeof(uint16_t));
@@ -280,12 +278,6 @@ void CAN_Slave_Heartbeat(void)
 {
     uint8_t tx_data[8];
 
-    // uint16_t axis_error = MC_GetCurrentFaultsMotor1();       // faults that are currently active.
-    // uint16_t occurred_faults = MC_GetOccurredFaultsMotor1(); // faults that have occurred on Motor 1 since its state machine moved to the #FAULT_NOW state.
-    // uint16_t current_state = MC_GetSTMStateMotor1();
-    // uint16_t axis_state = (current_state == RUN) ? AXIS_STATE_CLOSED_LOOP_CONTROL : AXIS_STATE_IDLE;
-    // uint16_t motor_power_int = (uint16_t)MC_GetAveragePowerMotor1_F();
-
     uint16_t axis_faults = 0;
     uint16_t axis_state = 0;
 
@@ -300,7 +292,7 @@ void CAN_Slave_Heartbeat(void)
     // memcpy(&tx_data[4], &occurred_faults, sizeof(uint16_t));
     // memcpy(&tx_data[6], &motor_power_int, sizeof(uint16_t));
 
-    uint32_t id = ODRIVE_MAKE_CAN_ID(g_my_axis_id, ODRIVE_HEARTBEAT_MESSAGE);
+    uint32_t id = CAN_MAKE_ID(g_my_axis_id, CAN_CMD_HEARTBEAT);
     send_can_frame(id, tx_data, 8);
 }
 
@@ -319,7 +311,7 @@ void CAN_Slave_Telemetry(void)
     memcpy(&tx_data[0], &current_angle_rev, sizeof(float));
     memcpy(&tx_data[4], &current_velocity_rpm, sizeof(float));
 
-    uint32_t id = ODRIVE_MAKE_CAN_ID(g_my_axis_id, ODRIVE_GET_ENCODER_ESTIMATES);
+    uint32_t id = CAN_MAKE_ID(g_my_axis_id, CAN_CMD_ENCODER_FEEDBACK);
     send_can_frame(id, tx_data, 8);
 }
 

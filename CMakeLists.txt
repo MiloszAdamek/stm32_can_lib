@@ -20,3 +20,9 @@ target_include_directories(stm32_can_lib PUBLIC
 target_link_libraries(stm32_can_lib PUBLIC
     stm32cubemx
 )
+
+option(STM32_CAN_FREERTOS "Build the FreeRTOS motor supervisor" OFF)
+if(STM32_CAN_FREERTOS)
+    target_sources(stm32_can_lib PRIVATE can_profile/freertos/can_rtos.c)
+    target_include_directories(stm32_can_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/can_profile/freertos)
+endif()
